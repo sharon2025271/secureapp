@@ -1,16 +1,52 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_talisman import Talisman
 import re
+import html
+from cryptography.fernet import Fernet, InvalidToken
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'  # Change this to a secure secret key
+app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+limiter = Limiter(app=app, key_func=get_remote_address)
+talisman = Talisman(app, content_security_policy={
+    'default-src': "'self'",
+    'script-src': "'self' 'unsafe-inline'",
+    'style-src': "'self' 'unsafe-inline'",
+    'img-src': "'self' data:",
+    'font-src': "'self'",
+    'form-action': "'self'",
+    'frame-ancestors': "'none'",
+    'base-uri': "'self'",
+    'object-src': "'none'"
+})
+
+ENCRYPTION_KEY = b'1Qw1Qw2Qw3Qw4Qw5Qw6Qw7Qw8Qw9Qw0Qw1Qw2Qw3Qw4='
+fernet = Fernet(ENCRYPTION_KEY)
+
+def sanitize_input(input_str):
+    if not input_str:
+        return None
+    return html.escape(input_str.strip())
+
+def validate_username(username):
+    if not username:
+        return False, "Username is required"
+    if len(username) < 3 or len(username) > 20:
+        return False, "Username must be between 3 and 20 characters"
+    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        return False, "Username can only contain letters, numbers, and underscores"
+    return True, "Username is valid"
 
 def validate_password(password):
     if len(password) < 8:
@@ -23,10 +59,48 @@ def validate_password(password):
         return False, "Password must contain at least one special character"
     return True, "Password is valid"
 
+def encrypt_field(value):
+    if value is None:
+        return None
+    return fernet.encrypt(value.encode()).decode()
+
+def decrypt_field(value):
+    if value is None:
+        return None
+    try:
+        return fernet.decrypt(value.encode()).decode()
+    except (InvalidToken, AttributeError):
+        return None
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
+    full_name = db.Column(db.String(100))
+    _bio = db.Column('bio', db.Text)
+    _location = db.Column('location', db.String(100))
+    _interests = db.Column('interests', db.String(200))
+
+    @property
+    def bio(self):
+        return decrypt_field(self._bio)
+    @bio.setter
+    def bio(self, value):
+        self._bio = encrypt_field(value)
+
+    @property
+    def location(self):
+        return decrypt_field(self._location)
+    @location.setter
+    def location(self, value):
+        self._location = encrypt_field(value)
+
+    @property
+    def interests(self):
+        return decrypt_field(self._interests)
+    @interests.setter
+    def interests(self, value):
+        self._interests = encrypt_field(value)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -43,43 +117,61 @@ def index():
     return render_template('index.html')
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("20 per minute")
 def register():
     if request.method == 'POST':
-        username = request.form.get('username')
+        username = sanitize_input(request.form.get('username'))
         password = request.form.get('password')
+        
+        is_valid_username, username_message = validate_username(username)
+        if not is_valid_username:
+            flash(username_message)
+            return redirect(url_for('register'))
         
         if User.query.filter_by(username=username).first():
             flash('Username already exists')
             return redirect(url_for('register'))
         
-        # Validate password
         is_valid, message = validate_password(password)
         if not is_valid:
             flash(message)
             return redirect(url_for('register'))
         
-        user = User(username=username)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-        
-        flash('Registration successful!')
-        return redirect(url_for('login'))
+        try:
+            user = User(username=username)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            flash('Registration successful!')
+            return redirect(url_for('login'))
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred during registration. Please try again.')
+            return redirect(url_for('register'))
     
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("20 per minute")
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
+        username = sanitize_input(request.form.get('username'))
         password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
         
-        if user and user.check_password(password):
-            login_user(user)
-            return redirect(url_for('dashboard'))
+        if not username or not password:
+            flash('Please provide both username and password')
+            return redirect(url_for('login'))
         
-        flash('Invalid username or password')
+        try:
+            user = User.query.filter_by(username=username).first()
+            if user and user.check_password(password):
+                login_user(user)
+                return redirect(url_for('dashboard'))
+            
+            flash('Invalid username or password')
+        except Exception as e:
+            flash('An error occurred during login. Please try again.')
+    
     return render_template('login.html')
 
 @app.route('/dashboard')
@@ -93,7 +185,39 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    if request.method == 'POST':
+        current_user.full_name = sanitize_input(request.form.get('full_name'))
+        current_user.bio = sanitize_input(request.form.get('bio'))
+        current_user.location = sanitize_input(request.form.get('location'))
+        current_user.interests = sanitize_input(request.form.get('interests'))
+        try:
+            db.session.commit()
+            flash('Profile updated successfully!')
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while updating your profile.')
+        return redirect(url_for('profile'))
+    return render_template('profile.html')
+
+@app.route('/user/<username>')
+def user_profile(username):
+    user = User.query.filter_by(username=username).first_or_404()
+    return render_template('user_profile.html', user=user)
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('500.html'), 500
+
 if __name__ == '__main__':
     with app.app_context():
+        db.drop_all()
         db.create_all()
     app.run(debug=True) 

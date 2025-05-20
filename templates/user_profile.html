@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-body">
+            <h2 class="card-title">{{ user.username }}'s Profile</h2>
+            
+            {% if user.full_name %}
+            <h4 class="card-subtitle mb-2 text-muted">{{ user.full_name }}</h4>
+            {% endif %}
+            
+            {% if user.location %}
+            <p class="card-text"><strong>Location:</strong> {{ user.location }}</p>
+            {% endif %}
+            
+            {% if user.bio %}
+            <div class="card-text">
+                <strong>Bio:</strong>
+                <p>{{ user.bio }}</p>
+            </div>
+            {% endif %}
+            
+            {% if user.interests %}
+            <div class="card-text">
+                <strong>Interests:</strong>
+                <p>
+                    {% for interest in user.interests.split(',') %}
+                    <span class="badge bg-primary me-1">{{ interest.strip() }}</span>
+                    {% endfor %}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 
