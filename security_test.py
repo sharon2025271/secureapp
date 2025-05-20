@@ -83,29 +83,39 @@ class SecurityTester:
                 except Exception as e:
                     logger.error(f"Error testing XSS: {str(e)}")
     
+    def get_csrf_token(self, endpoint):
+        """Fetch CSRF token from a form page"""
+        try:
+            response = self.session.get(urljoin(self.base_url, endpoint))
+            match = re.search(r'name="csrf_token" value="([^"]+)"', response.text)
+            if match:
+                return match.group(1)
+        except Exception as e:
+            logger.error(f"Error fetching CSRF token: {str(e)}")
+        return None
+
     def test_rate_limiting(self):
         """Test rate limiting implementation"""
         logger.info("Testing rate limiting...")
-        
         endpoint = '/login'
         requests_count = 25  # Should be more than the rate limit
-        
         start_time = time.time()
         responses = []
-        
         for _ in range(requests_count):
             try:
+                csrf_token = self.get_csrf_token(endpoint)
+                data = {'username': 'test', 'password': 'test123'}
+                if csrf_token:
+                    data['csrf_token'] = csrf_token
                 response = self.session.post(
                     urljoin(self.base_url, endpoint),
-                    data={'username': 'test', 'password': 'test123'}
+                    data=data
                 )
                 responses.append(response.status_code)
             except Exception as e:
                 logger.error(f"Error testing rate limiting: {str(e)}")
-        
         end_time = time.time()
         duration = end_time - start_time
-        
         if len([r for r in responses if r == 429]) > 0:
             logger.info("Rate limiting is working")
         else:

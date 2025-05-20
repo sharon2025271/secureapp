@@ -4,6 +4,7 @@
 <div class="container mt-4">
     <h2>Edit Profile</h2>
     <form method="POST" action="{{ url_for('profile') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
             <label for="full_name" class="form-label">Full Name</label>
             <input type="text" class="form-control" id="full_name" name="full_name" value="{{ current_user.full_name or '' }}">

@@ -5,6 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
+from flask_wtf.csrf import CSRFProtect
 import re
 import html
 from cryptography.fernet import Fernet, InvalidToken
@@ -18,6 +19,7 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+csrf = CSRFProtect(app)
 limiter = Limiter(app=app, key_func=get_remote_address)
 talisman = Talisman(app, content_security_policy={
     'default-src': "'self'",
@@ -215,6 +217,10 @@ def not_found_error(error):
 def internal_error(error):
     db.session.rollback()
     return render_template('500.html'), 500
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify(error="ratelimit exceeded", message=str(e)), 429
 
 if __name__ == '__main__':
     with app.app_context():
