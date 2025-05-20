@@ -9,6 +9,24 @@ from flask_wtf.csrf import CSRFProtect
 import re
 import html
 from cryptography.fernet import Fernet, InvalidToken
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Set up logging to file and console
+log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+file_handler = RotatingFileHandler('app.log', maxBytes=2*1024*1024, backupCount=5)
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+console_handler.setLevel(logging.INFO)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.handlers = []  # Remove any default handlers
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
@@ -127,15 +145,18 @@ def register():
         
         is_valid_username, username_message = validate_username(username)
         if not is_valid_username:
+            logger.warning(f"Registration failed: {username_message} (username: {username})")
             flash(username_message)
             return redirect(url_for('register'))
         
         if User.query.filter_by(username=username).first():
+            logger.warning(f"Registration failed: Username already exists ({username})")
             flash('Username already exists')
             return redirect(url_for('register'))
         
         is_valid, message = validate_password(password)
         if not is_valid:
+            logger.warning(f"Registration failed: {message} (username: {username})")
             flash(message)
             return redirect(url_for('register'))
         
@@ -144,10 +165,12 @@ def register():
             user.set_password(password)
             db.session.add(user)
             db.session.commit()
+            logger.info(f"User registered successfully: {username}")
             flash('Registration successful!')
             return redirect(url_for('login'))
         except Exception as e:
             db.session.rollback()
+            logger.error(f"Registration error for {username}: {str(e)}")
             flash('An error occurred during registration. Please try again.')
             return redirect(url_for('register'))
     
@@ -161,6 +184,7 @@ def login():
         password = request.form.get('password')
         
         if not username or not password:
+            logger.warning("Login failed: Missing username or password")
             flash('Please provide both username and password')
             return redirect(url_for('login'))
         
@@ -168,10 +192,13 @@ def login():
             user = User.query.filter_by(username=username).first()
             if user and user.check_password(password):
                 login_user(user)
+                logger.info(f"User logged in: {username}")
                 return redirect(url_for('dashboard'))
             
+            logger.warning(f"Login failed: Invalid credentials for {username}")
             flash('Invalid username or password')
         except Exception as e:
+            logger.error(f"Login error for {username}: {str(e)}")
             flash('An error occurred during login. Please try again.')
     
     return render_template('login.html')
@@ -197,9 +224,11 @@ def profile():
         current_user.interests = sanitize_input(request.form.get('interests'))
         try:
             db.session.commit()
+            logger.info(f"Profile updated for user: {current_user.username}")
             flash('Profile updated successfully!')
         except Exception as e:
             db.session.rollback()
+            logger.error(f"Profile update error for {current_user.username}: {str(e)}")
             flash('An error occurred while updating your profile.')
         return redirect(url_for('profile'))
     return render_template('profile.html')
@@ -211,15 +240,18 @@ def user_profile(username):
 
 @app.errorhandler(404)
 def not_found_error(error):
+    logger.warning(f"404 Not Found: {request.path}")
     return render_template('404.html'), 404
 
 @app.errorhandler(500)
 def internal_error(error):
     db.session.rollback()
+    logger.error(f"500 Internal Server Error: {str(error)}")
     return render_template('500.html'), 500
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
+    logger.warning(f"429 Too Many Requests: {request.path}")
     return jsonify(error="ratelimit exceeded", message=str(e)), 429
 
 if __name__ == '__main__':
