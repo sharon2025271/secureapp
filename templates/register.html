@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+    <h1>Register</h1>
+    <form method="POST" id="registerForm">
+        <input type="text" name="username" placeholder="Username" required>
+        <div style="position: relative;">
+            <input type="password" name="password" id="password" placeholder="Password" required 
+                   pattern="^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':&quot;\\|,.<>\/?])[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':&quot;\\|,.<>\/?]{8,}$"
+                   title="Password must be at least 8 characters long and include letters, numbers, and special characters">
+            <button type="button" id="togglePassword" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 0;">
+                👁️
+            </button>
+        </div>
+        <div id="password-strength" style="margin-top: 5px; font-size: 0.9em;"></div>
+        <div class="password-requirements" style="margin: 10px 0; font-size: 0.9em; color: #666;">
+            Password must contain:
+            <ul style="margin: 5px 0; padding-left: 20px;">
+                <li id="length">At least 8 characters</li>
+                <li id="letter">At least one letter</li>
+                <li id="number">At least one number</li>
+                <li id="special">At least one special character</li>
+            </ul>
+        </div>
+        <button type="submit">Register</button>
+    </form>
+    <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a></p>
+
+    <script>
+        const password = document.getElementById('password');
+        const strength = document.getElementById('password-strength');
+        const togglePassword = document.getElementById('togglePassword');
+        const requirements = {
+            length: document.getElementById('length'),
+            letter: document.getElementById('letter'),
+            number: document.getElementById('number'),
+            special: document.getElementById('special')
+        };
+
+        // Toggle password visibility
+        togglePassword.addEventListener('click', function() {
+            const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+            password.setAttribute('type', type);
+            this.textContent = type === 'password' ? '👁️' : '👁️‍🗨️';
+        });
+
+        password.addEventListener('input', function() {
+            const value = this.value;
+            let score = 0;
+            
+            // Check length
+            if (value.length >= 8) {
+                score++;
+                requirements.length.style.color = 'green';
+            } else {
+                requirements.length.style.color = '#666';
+            }
+            
+            // Check for letters
+            if (/[A-Za-z]/.test(value)) {
+                score++;
+                requirements.letter.style.color = 'green';
+            } else {
+                requirements.letter.style.color = '#666';
+            }
+            
+            // Check for numbers
+            if (/\d/.test(value)) {
+                score++;
+                requirements.number.style.color = 'green';
+            } else {
+                requirements.number.style.color = '#666';
+            }
+            
+            // Check for special characters (expanded set)
+            if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value)) {
+                score++;
+                requirements.special.style.color = 'green';
+            } else {
+                requirements.special.style.color = '#666';
+            }
+
+            // Update strength indicator
+            if (score === 0) {
+                strength.textContent = 'Very Weak';
+                strength.style.color = 'red';
+            } else if (score === 1) {
+                strength.textContent = 'Weak';
+                strength.style.color = 'orange';
+            } else if (score === 2) {
+                strength.textContent = 'Medium';
+                strength.style.color = 'yellow';
+            } else if (score === 3) {
+                strength.textContent = 'Strong';
+                strength.style.color = 'lightgreen';
+            } else {
+                strength.textContent = 'Very Strong';
+                strength.style.color = 'green';
+            }
+        });
+    </script>
+{% endblock %} 
