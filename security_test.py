@@ -5,17 +5,18 @@ import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import re
+from typing import List, Dict, Any, Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class SecurityTester:
-    def __init__(self, base_url="http://localhost:5000"):
+    def __init__(self, base_url: str = "http://localhost:5000"):
         self.base_url = base_url
         self.session = requests.Session()
-        self.vulnerabilities = []
+        self.vulnerabilities: List[Dict[str, Any]] = []
         
-    def test_sql_injection(self):
+    def test_sql_injection(self) -> None:
         """Test for SQL injection vulnerabilities"""
         logger.info("Testing for SQL injection vulnerabilities...")
         
@@ -47,7 +48,7 @@ class SecurityTester:
                 except Exception as e:
                     logger.error(f"Error testing SQL injection: {str(e)}")
     
-    def test_xss(self):
+    def test_xss(self) -> None:
         """Test for XSS vulnerabilities"""
         logger.info("Testing for XSS vulnerabilities...")
         
@@ -83,18 +84,17 @@ class SecurityTester:
                 except Exception as e:
                     logger.error(f"Error testing XSS: {str(e)}")
     
-    def get_csrf_token(self, endpoint):
+    def get_csrf_token(self, endpoint: str) -> Optional[str]:
         """Fetch CSRF token from a form page"""
         try:
             response = self.session.get(urljoin(self.base_url, endpoint))
             match = re.search(r'name="csrf_token" value="([^"]+)"', response.text)
-            if match:
-                return match.group(1)
+            return match.group(1) if match else None
         except Exception as e:
             logger.error(f"Error fetching CSRF token: {str(e)}")
-        return None
+            return None
 
-    def test_rate_limiting(self):
+    def test_rate_limiting(self) -> None:
         """Test rate limiting implementation"""
         logger.info("Testing rate limiting...")
         endpoint = '/login'
@@ -116,7 +116,7 @@ class SecurityTester:
                 logger.error(f"Error testing rate limiting: {str(e)}")
         end_time = time.time()
         duration = end_time - start_time
-        if len([r for r in responses if r == 429]) > 0:
+        if not any(r == 429 for r in responses):
             logger.info("Rate limiting is working")
         else:
             self.vulnerabilities.append({
@@ -127,7 +127,7 @@ class SecurityTester:
                 'status_codes': responses
             })
     
-    def test_csrf(self):
+    def test_csrf(self) -> None:
         """Test for CSRF vulnerabilities"""
         logger.info("Testing for CSRF vulnerabilities...")
         
@@ -146,7 +146,7 @@ class SecurityTester:
             except Exception as e:
                 logger.error(f"Error testing CSRF: {str(e)}")
     
-    def test_encryption(self):
+    def test_encryption(self) -> None:
         """Test if sensitive data is properly encrypted"""
         logger.info("Testing data encryption...")
         
@@ -174,7 +174,7 @@ class SecurityTester:
         except Exception as e:
             logger.error(f"Error testing encryption: {str(e)}")
     
-    def run_all_tests(self):
+    def run_all_tests(self) -> List[Dict[str, Any]]:
         """Run all security tests"""
         tests = [
             self.test_sql_injection,
@@ -189,7 +189,7 @@ class SecurityTester:
         
         return self.vulnerabilities
 
-def main():
+def main() -> None:
     tester = SecurityTester()
     vulnerabilities = tester.run_all_tests()
     

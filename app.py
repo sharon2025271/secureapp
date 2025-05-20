@@ -6,15 +6,17 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
-import re
-import html
 from cryptography.fernet import Fernet, InvalidToken
 import logging
 from logging.handlers import RotatingFileHandler
+import os
+import re
+import html
 
-# Set up logging to file and console
+os.makedirs('logs', exist_ok=True)
+
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-file_handler = RotatingFileHandler('app.log', maxBytes=2*1024*1024, backupCount=5)
+file_handler = RotatingFileHandler('logs/app.log', maxBytes=2*1024*1024, backupCount=5)
 file_handler.setFormatter(log_formatter)
 file_handler.setLevel(logging.INFO)
 
@@ -24,14 +26,21 @@ console_handler.setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-logger.handlers = []  # Remove any default handlers
+logger.handlers = []
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', 'your-secret-key'),
+    SQLALCHEMY_DATABASE_URI='sqlite:///users.db',
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    WTF_CSRF_TIME_LIMIT=3600,
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=3600
+)
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -39,6 +48,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 csrf = CSRFProtect(app)
 limiter = Limiter(app=app, key_func=get_remote_address)
+
 talisman = Talisman(app, content_security_policy={
     'default-src': "'self'",
     'script-src': "'self' 'unsafe-inline'",
@@ -51,18 +61,16 @@ talisman = Talisman(app, content_security_policy={
     'object-src': "'none'"
 })
 
-ENCRYPTION_KEY = b'1Qw1Qw2Qw3Qw4Qw5Qw6Qw7Qw8Qw9Qw0Qw1Qw2Qw3Qw4='
+ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', b'1Qw1Qw2Qw3Qw4Qw5Qw6Qw7Qw8Qw9Qw0Qw1Qw2Qw3Qw4=')
 fernet = Fernet(ENCRYPTION_KEY)
 
 def sanitize_input(input_str):
-    if not input_str:
-        return None
-    return html.escape(input_str.strip())
+    return html.escape(input_str.strip()) if input_str else None
 
 def validate_username(username):
     if not username:
         return False, "Username is required"
-    if len(username) < 3 or len(username) > 20:
+    if not 3 <= len(username) <= 20:
         return False, "Username must be between 3 and 20 characters"
     if not re.match(r'^[a-zA-Z0-9_]+$', username):
         return False, "Username can only contain letters, numbers, and underscores"
@@ -80,15 +88,11 @@ def validate_password(password):
     return True, "Password is valid"
 
 def encrypt_field(value):
-    if value is None:
-        return None
-    return fernet.encrypt(value.encode()).decode()
+    return fernet.encrypt(value.encode()).decode() if value else None
 
 def decrypt_field(value):
-    if value is None:
-        return None
     try:
-        return fernet.decrypt(value.encode()).decode()
+        return fernet.decrypt(value.encode()).decode() if value else None
     except (InvalidToken, AttributeError):
         return None
 
@@ -251,11 +255,8 @@ def internal_error(error):
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
-    logger.warning(f"429 Too Many Requests: {request.path}")
-    return jsonify(error="ratelimit exceeded", message=str(e)), 429
+    logger.warning(f"Rate limit exceeded: {request.path}")
+    return jsonify(error="Rate limit exceeded"), 429
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-    app.run(debug=True) 
+    app.run(host='0.0.0.0', port=5000, debug=False) 
