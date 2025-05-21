@@ -36,4 +36,6 @@ docker run --rm \
     --name $CONTAINER_NAME \
     -p $PORT:5000 \
     -v "$LOG_DIR:/app/logs" \
+    -e FLASK_APP=app.py \
+    -e FLASK_ENV=production \
     $IMAGE_NAME 
