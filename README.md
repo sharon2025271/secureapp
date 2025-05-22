@@ -32,7 +32,7 @@ cd <project-directory>
 2. Create and activate a virtual environment:
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  
 ```
 
 3. Install dependencies:
@@ -170,9 +170,6 @@ python security_test.py
 4. Push to the branch
 5. Create a Pull Request
 
-## License
-
-[Specify your license here]
 
 ## Security Considerations
 
@@ -182,5 +179,3 @@ python security_test.py
 - Keep encryption keys secure
 - Regularly backup the database 
 
-## Update
-This is a new update from PyCharm.
