@@ -42,7 +42,6 @@ pip install -r requirements.txt
 
 4. Initialize the database:
 ```bash
-python init_db.py
 ```
 
 ## Configuration
@@ -182,3 +181,6 @@ python security_test.py
 - Monitor logs for suspicious activity
 - Keep encryption keys secure
 - Regularly backup the database 
+
+## Update
+This is a new update from PyCharm.
